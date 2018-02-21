@@ -1373,7 +1373,7 @@ func TestSearchPostsInChannel(t *testing.T) {
 
 }
 
-func TestSearchPostsInChannel_WithoutViewTeamPermission(t *testing.T) {
+func TestSearchPostsWithoutViewTeamPermission(t *testing.T) {
 	th := Setup().InitBasic()
 	defer th.TearDown()
 	th.LoginBasic()
@@ -1396,7 +1396,7 @@ func TestSearchPostsInChannel_WithoutViewTeamPermission(t *testing.T) {
 	}
 }
 
-func TestSearchPostsInChannel_HasSystemLevelReadChannelPermission(t *testing.T) {
+func TestSearchPostsHasSystemLevelReadChannelPermission(t *testing.T) {
 	th := Setup().InitBasic()
 	defer th.TearDown()
 	th.LoginBasic()
@@ -1441,7 +1441,7 @@ func TestSearchPostsInChannel_HasSystemLevelReadChannelPermission(t *testing.T) 
 	}
 }
 
-func TestSearchPostsInChannel_HasTeamLevelReadChannelPermission(t *testing.T) {
+func TestSearchPostsHasTeamLevelReadChannelPermission(t *testing.T) {
 	th := Setup().InitBasic()
 	defer th.TearDown()
 	th.LoginBasic()
@@ -1486,7 +1486,7 @@ func TestSearchPostsInChannel_HasTeamLevelReadChannelPermission(t *testing.T) {
 	}
 }
 
-func TestSearchPostsInChannel_NoReadChannelPermission(t *testing.T) {
+func TestSearchPostsNoReadChannelPermission(t *testing.T) {
 	th := Setup().InitBasic()
 	defer th.TearDown()
 	th.LoginBasic()
@@ -1531,6 +1531,61 @@ func TestSearchPostsInChannel_NoReadChannelPermission(t *testing.T) {
 		if post.Message != message2 {
 			t.Fatal("Returned the wrong post.")
 		}
+	}
+}
+
+func TestSearchPostsWithInChannelNameFilter(t *testing.T) {
+	th := Setup().InitBasic()
+	defer th.TearDown()
+	th.LoginBasic()
+	Client := th.Client
+
+	channel := th.CreatePublicChannel()
+	channel2 := th.CreatePublicChannel()
+
+	message := "alabaster wood furniture"
+	message2 := message + " is awesome!"
+
+	_ = th.CreateMessagePostWithClient(Client, channel, message)
+	_ = th.CreateMessagePostWithClient(Client, channel2, message2)
+
+	// Verify search setup
+	if posts, _ := Client.SearchPosts(th.BasicTeam.Id, "alabaster", false); len(posts.Order) != 2 {
+		t.Fatalf("wrong number of posts returned %v", len(posts.Order))
+	}
+
+	channelMember, _ := th.App.GetChannelMember(channel.Id, th.BasicUser.Id)
+	originalChannelMemberRoles := channelMember.Roles
+
+	// Remove channelmember roles
+	th.App.UpdateChannelMemberRoles(channel.Id, th.BasicUser.Id, "")
+	defer th.App.UpdateChannelMemberRoles(channel.Id, th.BasicUser.Id, originalChannelMemberRoles)
+
+	// Verify roles were removed
+	if channelMember, _ := th.App.GetChannelMember(channel.Id, th.BasicUser.Id); channelMember.Roles != "" {
+		t.Fatal("Roles setup failure, test expects the roles to have been removed.")
+	}
+
+	// Search again.
+	posts2, _ := Client.SearchPosts(th.BasicTeam.Id, "alabaster in:"+channel2.Name, false)
+
+	// One post is returned...
+	if len(posts2.Posts) != 1 {
+		t.Fatalf("Did not expect posts returned for channel without channel_user role")
+	}
+
+	// ... and its the one from the channel with read_channel permission.
+	for _, post := range posts2.Posts {
+		if post.Message != message2 {
+			t.Fatal("Returned the wrong post.")
+		}
+	}
+
+	// Search again.
+	posts, _ := Client.SearchPosts(th.BasicTeam.Id, "alabaster in:"+channel.Name, false)
+
+	if len(posts.Posts) != 0 {
+		t.Fatalf("Expected no posts returned for the query with 'in' filter for channel %v", channel.Name)
 	}
 }
 
